@@ -131,6 +131,34 @@ const client = new MongoClient(uri, {
 
       const result = await productCollection.updateOne(filter, updatedDoc,option);
       res.send(result);
+    });
+
+    //order related API
+    app.get('/orders', async(req, res)=>{
+      const orders = await orderCollection.find().toArray();
+      res.send(orders);
+    });
+
+
+
+    app.get('/orders/:id' , async(req, res)=> {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const order = await orderCollection.findOne(query);
+      res.send(order);
+    });
+
+
+    app.post('/orders', async(req,res)=>{
+      const order = req.body;
+      const result = await orderCollection.insertOne(order);
+      res.send(result);
+      const productQuery = {
+        _id: new ObjectId(order.product_info?.product_id)
+      };
+      const option = {upsert: true};
+      const orderedProduct = await productCollection.findOne(productQuery)
+
     })
 
   } finally {
