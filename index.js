@@ -98,12 +98,40 @@ const client = new MongoClient(uri, {
 
     });
 
+    //Get all reported seller product
+    app.get('/reported-products' ,async(req, res)=>{
+      const query = {reported: true};
+      const result = await productCollection
+      .find(query)
+      .sort({reportCount: 1})
+      .toArray();
+      res.send(result);
+    });
+
     app.get('/user/buyer/:id', async(req,res)=>{
       const id = req.params.id;
       const query = {_id: new ObjectId(id)};
       const user = await userCollection.findOne(query);
       res.send({isBuyer: user?.role === 'buyer' ? true : false});
     });
+
+    //Report a seller created product by buyer, only buyer can report
+
+    app.patch('/report-product/:id' , async(req,res)=>{
+      const id = req.query.id;
+      const prevReport = parseInt(req.query.reportCount);
+      const filter = {_id: new ObjectId(id)};
+      const option = {upsert: true};
+      const updatedDoc = {
+        $set: {
+          reported: true,
+          reportedCount: prevReport + 1
+        }
+      };
+
+      const result = await productCollection.updateOne(filter, updatedDoc,option);
+      res.send(result);
+    })
 
   } finally {
     
