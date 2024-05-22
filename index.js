@@ -45,7 +45,22 @@ const client = new MongoClient(uri, {
 
 
    
-   
+   //Products related API
+
+   app.get('/products' , async(req, res)=>{
+    const query = {};
+    const result = await productCollection
+    .find(query)
+    .sort({createdAt: -1})
+    .toArray();
+    res.send(result);
+   })
+
+   app.post('/products', async(req,res)=>{
+    const product = req.body;
+    const result = await productCollection.insertOne(product);
+    res.send(result);
+   });
    
    
    
