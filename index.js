@@ -35,7 +35,7 @@ const client = new MongoClient(uri, {
   try {
 
     const database = client.db('oldCarHat');
-    const carCollection = database.collection('cars');
+    const productCollection = database.collection('products');
     const userCollection = database.collection('users');
     const categoryCollection = database.collection('categories');
     const orderCollection = database.collection('orders');
@@ -43,6 +43,30 @@ const client = new MongoClient(uri, {
     const paymentCollection = database.collection('payments');
    
 
+
+   
+   
+   
+   
+   
+   
+    //Category Related API
+    app.get('/categories' , async(req, res)=>{
+      const query = {};
+      const categories = await categoryCollection
+      .find(query)
+      .sort({category_name:1})
+      .toArray();
+      res.send(categories);
+    });
+
+    app.post('/categories', async(req,res)=>{
+      // const uid = req.params.uid;
+      const category = req.body;
+      const result = await categoryCollection.insertOne(category);
+      res.send(result);
+
+    })
 
   } finally {
     
