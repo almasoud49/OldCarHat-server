@@ -62,7 +62,13 @@ const client = new MongoClient(uri, {
     res.send(result);
    });
    
-   
+   app.delete('/product-delete/:id', async(req,res)=>{
+    const id = req.params.id;
+    const filter = {_id: new ObjectId(id)};
+    const result = await productCollection.deleteOne(filter);
+    res.send(result);
+
+   })
    
    
     //Category Related API
