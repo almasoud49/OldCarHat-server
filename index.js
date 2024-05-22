@@ -1,6 +1,6 @@
 const express = require('express')
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const app = express()
@@ -81,7 +81,29 @@ const client = new MongoClient(uri, {
       const result = await categoryCollection.insertOne(category);
       res.send(result);
 
-    })
+    });
+
+    //User Related API
+    app.post('/users', async(req, res)=>{
+      const user = req.body;
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.get('/user/admin/:id' , async(req,res)=>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)}
+      const user = await userCollection.findOne(query);
+      res.send({isAdmin: user?.role === 'admin' ? true : false})
+
+    });
+
+    app.get('/user/buyer/:id', async(req,res)=>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const user = await userCollection.findOne(query);
+      res.send({isBuyer: user?.role === 'buyer' ? true : false});
+    });
 
   } finally {
     
