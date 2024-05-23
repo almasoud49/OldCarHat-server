@@ -269,7 +269,23 @@ const client = new MongoClient(uri, {
       res.send(result);
     });
 
+//Blog Related API//
+app.get('/blogs', async(req, res)=>{
+  const query = {};
+  const blogs = await blogCollection.find(query).toArray();
+  res.send(blogs)
+});
 
+
+app.post('/blog', async(req, res)=>{
+  const blog = req.body;
+  const result = await blogCollection.insertOne(blog);
+  res.send(result);
+});
+
+
+
+//Payment Related API//
   } finally {
     
     // await client.close();
