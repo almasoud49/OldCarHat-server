@@ -9,20 +9,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const port = process.env.PORT || 5000;
 
-//Middleware
+//middleware
 app.use(cors());
 app.use(express.json());
 
-
-
-
-app.get('/', (req, res) => {
-  res.send('Welcome Everyone to OldCarHat!')
-});
-
-
-
-//MongoDB
+//mongoDB
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@personal.dp2qomu.mongodb.net/?retryWrites=true&w=majority&appName=personal`;
 
 const client = new MongoClient(uri, {
@@ -35,8 +26,9 @@ const client = new MongoClient(uri, {
 
  const oldCarHat  =async()=> {
   try {
-
+    //database name
     const database = client.db('oldCarHat');
+    //database collection
     const productCollection = database.collection('products');
     const userCollection = database.collection('users');
     const categoryCollection = database.collection('categories');
@@ -94,8 +86,8 @@ const client = new MongoClient(uri, {
 
    
 
-   //Products related API//
-   //Get all product created by seller
+   //products related API//
+   //get all product created by seller
    app.get('/products/:uid' ,verifyToken, verifySeller, async(req, res)=>{
     const decoded = req.decoded;
 			const uid = req.params.uid;
@@ -112,7 +104,7 @@ const client = new MongoClient(uri, {
     res.send(result);
    });
 
-   //Get all product filter by category id
+   //get all product filter by category id
    app.get('/category/:id', async(req,res)=>{
     const id = req.params.id;
 			 
@@ -123,8 +115,9 @@ const client = new MongoClient(uri, {
 				.sort({ createAt: -1 })
 				.toArray();
 			res.send(result);
-   })
-//Post only seller created product
+   });
+
+//post only seller created product
    app.post('/products/:uid',verifyToken,
    verifySeller, async(req,res)=>{
     const decoded = req.decoded;
@@ -139,7 +132,7 @@ const client = new MongoClient(uri, {
     res.send(result);
    });
 
-   //Get all reported seller product
+   //get all reported seller product
    app.get('/reported-products/:uid' , verifyToken,verifyAdmin ,async(req, res)=>{
     const decoded = req.decoded;
 				const uid = req.params.uid;
@@ -156,10 +149,17 @@ const client = new MongoClient(uri, {
     res.send(result);
   });
 
-
-   app.patch('/report-product/:id' , async(req,res)=>{
+  //report a seller created product by buyer, only buyer can report
+   app.patch('/report-product/:uid' ,verifyToken, async(req,res)=>{
+    const decoded = req.decoded;
+			const uid = req.params.uid;
     const id = req.query.id;
     const prevReport = parseInt(req.query.reportCount);
+    if (uid !== decoded.uid) {
+      return res
+        .status(403)
+        .send({ message: 'Access Forbidden'});
+    }
     const filter = {_id: new ObjectId(id)};
     const option = {upsert: true};
     const updatedDoc = {
@@ -173,18 +173,32 @@ const client = new MongoClient(uri, {
     res.send(result);
   });
    
-  //Delete a product created by seller (delete by seller)
-   app.delete('/product-delete/:id', async(req,res)=>{
-    const id = req.params.id;
+  //delete a product created by seller (delete by seller)
+   app.delete('/product-delete/:uid',verifyToken,verifySeller, async(req,res)=>{
+    const decoded = req.decoded;
+				const uid = req.params.uid;
+				const id = req.query.id;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
     const filter = {_id: new ObjectId(id)};
     const result = await productCollection.deleteOne(filter);
     res.send(result);
 
    });
    
-   //Undo report given by buyer(Admin Only)
-   app.patch('/report-product-safe/:id', async(req,res)=>{
-    const id = req.query.id;
+   //undo report given by buyer(Admin Only)
+   app.patch('/report-product-safe/:uid',verifyToken,verifyAdmin, async(req,res)=>{
+    const decoded = req.decoded;
+				const uid = req.params.uid;
+				const id = req.query.id;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
     const filter = {_id: new ObjectId(id)};
     const option = {upsert: true};
     const updatedDoc = {
@@ -198,26 +212,24 @@ const client = new MongoClient(uri, {
     res.send(result)
    });
 
-   //Delete Reported product by admin
-   app.delete('/report-product-delete/:id', async(req, res)=>{
-    const id = req.query.id;
+   //delete Reported product by admin
+   app.delete('/report-product-delete/:uid', verifyToken,verifyAdmin, async(req, res)=>{
+    const decoded = req.decoded;
+				const uid = req.params.uid;
+				const id = req.query.id;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
     const filter = {_id: new ObjectId(id)};
     const result = await productCollection.deleteOne(filter);
     res.send(result);
    });
    
     //Category Related API//
-    //Get all product filter by category id
-    // app.get('/categories' , async(req, res)=>{
-    //   const query = {};
-    //   const categories = await categoryCollection
-    //   .find(query)
-    //   .sort({category_name:1})
-    //   .toArray();
-    //   res.send(categories);
-    // });
-
-    //Get all category list
+   
+    //get all category list
 		app.get('/categories', async (req, res) => {
 			const query = {};
 			const categories = await categoryCollection
@@ -227,7 +239,7 @@ const client = new MongoClient(uri, {
 			res.send(categories);
 		});
 
-    //Create a category items by Seller
+    //create a category items by Seller
     app.post('/categories/:uid',verifyToken,verifySeller, async(req,res)=>{
       const decoded = req.decoded;
       const uid = req.params.uid;
@@ -245,34 +257,47 @@ const client = new MongoClient(uri, {
 
     //User Related API//
 
-    //Saved new user data on database
+    //saved new user data on database
     app.post('/users', async(req, res)=>{
       const user = req.body;
+      const query = { uid: user.uid };
+			const userInDb = await userCollection.findOne(query);
+			if (userInDb?.uid) {
+				return res.send({});
+			}
+
       const result = await userCollection.insertOne(user);
       res.send(result);
     });
 
-    //Check user is Admin
-    app.get('/user/admin/:id' , async(req,res)=>{
-      const id = req.params.id;
-      const query = {_id: new ObjectId(id)}
+    //check user is Admin
+    app.get('/user/admin/:uid' , async(req,res)=>{
+      const uid = req.params.uid;
+			const query = { uid };
       const user = await userCollection.findOne(query);
       res.send({isAdmin: user?.role === 'admin' ? true : false})
 
     });
 
        
-
-    app.get('/user/buyer/:id', async(req,res)=>{
-      const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+    //check is user is buyer
+    app.get('/user/buyer/:uid', async(req,res)=>{
+      const uid = req.params.uid;
+			const query = { uid: uid };
       const user = await userCollection.findOne(query);
       res.send({isBuyer: user?.role === 'buyer' ? true : false});
     });
 
-    //Get all user data filter by their role
-    app.get('/users-by-role' , async(req, res)=>{
-      const role = req.query.role;
+    //get all user data filter by their role
+    app.get('/users-by-role/:uid' ,verifyToken,verifyAdmin, async(req, res)=>{
+      const decoded = req.decoded;
+				const uid = req.params.uid;
+				const role = req.query.role;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
       const query = {role};
       const users = await userCollection.find(query).toArray();
       res.send(users);
@@ -280,8 +305,15 @@ const client = new MongoClient(uri, {
 
     
     // make seller verified
-    app.patch('/seller-verify/:id', async(req, res)=>{
-      const id = req.query.id;
+    app.patch('/seller-verify/:uid',verifyToken,verifyAdmin, async(req, res)=>{
+      const decoded = req.decoded;
+				const uid = req.params.uid;
+				const id = req.query.id;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
       const filter = {_id: new ObjectId(id)};
       const option = {upsert: true};
       const updatedDoc = {
@@ -295,17 +327,27 @@ const client = new MongoClient(uri, {
 
     });
 
-    //Checked user is Seller
-    app.get('/user/seller/:id' , async(req, res)=>{
-      const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+    //checked user is Seller
+    app.get('/user/seller/:uid' , async(req, res)=>{
+      const uid = req.params.uid;
+			const query = { uid: uid };
       const user = await userCollection.findOne(query);
       res.send({isSeller: user?.role === 'seller' ? true: false});
 
     });
 
-    //Delete user by admin
-    app.delete('/user-delete/:id', verifyToken,verifyAdmin, async(req,res)=>{
+    //checked Seller Verified
+    app.get('/seller-verify/:uid', async(req,res)=>{
+      const uid = req.params.uid;
+			const query = { uid: uid };
+			const seller = await userCollection.findOne(query);
+			res.send({
+				isVerified: seller?.status === 'verified' ? true : false,
+			});
+    })
+
+    //delete user by admin
+    app.delete('/user-delete/:uid', verifyToken,verifyAdmin, async(req,res)=>{
       const decoded = req.decoded;
 				const uid = req.params.uid;
       const id = req.query.id;
@@ -322,7 +364,7 @@ const client = new MongoClient(uri, {
 
 
     //order related API//
-    //Get all order filter by user uid
+    //get all order filter by user uid
     app.get('/orders/:uid', async(req, res)=>{
       const decoded = req.decoded;
 			const uid = req.params.uid;
@@ -337,7 +379,7 @@ const client = new MongoClient(uri, {
     });
 
 
-    //Get a single order by user uid and order id
+    //get a single order by user uid and order id
     app.get('/order/:uid' , verifyToken, async(req, res)=> {
       const decoded = req.decoded;
 			const uid = req.params.uid;
@@ -352,7 +394,7 @@ const client = new MongoClient(uri, {
       res.send(order);
     });
 
-    //Create a order by user
+    //create a order by user
     app.post('/orders/:uid',verifyToken, async(req,res)=>{
       const decoded = req.decoded;
 			const uid = req.params.uid;
@@ -365,7 +407,7 @@ const client = new MongoClient(uri, {
       const result = await orderCollection.insertOne(order);
       res.send(result);
       const productQuery = {
-        _id: new ObjectId(order.product_info?.product_id)
+        _id: ObjectId(order.product_info?.product_id)
       };
       const option = {upsert: true};
       const orderedProduct = await productCollection.findOne(productQuery)
@@ -374,7 +416,7 @@ const client = new MongoClient(uri, {
 
     //Promotion related API//
 
-    //Get All Promoted Product
+    //get All Promoted Product
     app.get('/promoted-product', async(req, res)=>{
       const query = {promote: true};
       const result = await productCollection
@@ -384,8 +426,8 @@ const client = new MongoClient(uri, {
       res.send(result);
     });
 
-    // Make a product to promoted product
-    app.patch('/promote-product',verifyToken,verifySeller, async(req, res)=>{
+    // make a product to promoted product
+    app.patch('/promote-product/:uid',verifyToken,verifySeller, async(req, res)=>{
       const decoded = req.decoded;
 				const uid = req.params.uid;
       const id = req.query.id;
@@ -426,7 +468,7 @@ app.post('/blog', async(req, res)=>{
 
 
 //Payment Related API//
-//Create Payment Intent
+//create Payment Intent
 app.post('/create-payment-intent/:uid', verifyToken, async(req,res)=>{
   const uid = req.params.uid;
 			const decode = req.decoded;
@@ -448,7 +490,7 @@ app.post('/create-payment-intent/:uid', verifyToken, async(req,res)=>{
 });
 
 //save payment data to database
-app.post('/payments/:uid', async(req,res)=>{
+app.post('/payments/:uid',verifyToken, async(req,res)=>{
   const uid = req.params.uid;
 			const decode = req.decoded;
 			if (uid !== decode.uid) {
@@ -495,6 +537,10 @@ app.post('/payments/:uid', async(req,res)=>{
   }
 }
 oldCarHat().catch(console.dir);
+
+app.get('/', (req, res) => {
+  res.send('Welcome Everyone to OldCarHat!')
+});
 
 app.listen(port, () => {
   console.log(`OldCarHat app listening on port ${port}`)
