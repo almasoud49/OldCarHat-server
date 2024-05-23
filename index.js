@@ -175,6 +175,21 @@ const client = new MongoClient(uri, {
     })
 
     
+    // make seller verified
+    app.patch('/seller-verify/:id', async(req, res)=>{
+      const id = req.query.id;
+      const filter = {_id: new ObjectId(id)};
+      const option = {upsert: true};
+      const updatedDoc = {
+        $set: {
+          status:'verified'
+        }
+      };
+
+      const result = await userCollection.updateOne(filter,updatedDoc, option);
+      res.send(result);
+
+    });
 
     //order related API
     app.get('/orders', async(req, res)=>{
