@@ -3,7 +3,8 @@ const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
-const app = express()
+const app = express();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 
 const port = process.env.PORT || 5000;
@@ -31,6 +32,7 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
  const oldCarHat  =async()=> {
   try {
 
@@ -42,14 +44,9 @@ const client = new MongoClient(uri, {
     const blogCollection = database.collection('blogs');
     const paymentCollection = database.collection('payments');
    
-    //JWT Token//
-    app.post('/jwt', async(req, res)=>{
-      const user = req.body;
-      const token = jwt.sign(user, process.env.JWT_ACCESS_TOKEN,{expiresIn:process.env.JWT_SECRET_EXPIRESIN});
-      res.send({token})
-    });
-
-   // middlewares 
+    
+    // middlewares//
+    //Verify JWT Token 
     const verifyToken = (req, res, next) =>{
       const authHeader = req.headers.authorization;
       if(!authHeader){
@@ -65,24 +62,92 @@ const client = new MongoClient(uri, {
       })
     }
 
+    //Verify User role is Seller
+    const verifySeller = async(req,res, next)=>{
+      const decoded = req.decoded;
+      const sellerQuery = {uid: decoded.uid};
+      const seller = await userCollection.findOne(sellerQuery);
+      if(!seller && seller.role !== 'seller'){
+        return res.status(403).send({message:'Access Forbidden'})
+
+      }
+      next();
+    };
+
+    //Verify user role is Admin
+    const verifyAdmin = async(req,res,next)=>{
+      const decoded = req.decoded;
+      const adminQuery = {uid: decoded.uid};
+      const admin = await userCollection.findOne(adminQuery);
+      if(!admin && admin.role !== 'admin'){
+        return res.status(403).send({message:'Access Forbidden'})
+      }
+      next();
+    }
+    
+    //JWT Token
+    app.post('/jwt', async(req, res)=>{
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_ACCESS_TOKEN,{expiresIn:process.env.JWT_SECRET_EXPIRESIN});
+      res.send({token})
+    });
+
+   
+
    //Products related API//
-   app.get('/products' ,verifyToken, async(req, res)=>{
-    const query = {};
+   //Get all product created by seller
+   app.get('/products/:uid' ,verifyToken, verifySeller, async(req, res)=>{
+    const decoded = req.decoded;
+			const uid = req.params.uid;
+			const query = { seller_uid: uid };
+			if (uid !== decoded.uid) {
+				return res
+					.status(403)
+					.send({ message: 'Access Forbidden'});
+			}
     const result = await productCollection
     .find(query)
-    .sort({createdAt: -1})
+    .sort({ createAt: -1 })
     .toArray();
     res.send(result);
    });
 
-   app.post('/products', async(req,res)=>{
+   //Get all product filter by category id
+   app.get('/category/:id', async(req,res)=>{
+    const id = req.params.id;
+			 
+			const filterById = {_id: new ObjectId(id)}
+      const query = { category_id: filterById };
+			const result = await productCollection
+				.find(query)
+				.sort({ createAt: -1 })
+				.toArray();
+			res.send(result);
+   })
+//Post only seller created product
+   app.post('/products/:uid',verifyToken,
+   verifySeller, async(req,res)=>{
+    const decoded = req.decoded;
+				const uid = req.params.uid;
     const product = req.body;
+    if (uid !== decoded.uid) {
+      return res
+        .status(403)
+        .send({ message: 'Access Forbidden'});
+    }
     const result = await productCollection.insertOne(product);
     res.send(result);
    });
 
    //Get all reported seller product
-   app.get('/reported-products' ,async(req, res)=>{
+   app.get('/reported-products/:uid' , verifyToken,verifyAdmin ,async(req, res)=>{
+    const decoded = req.decoded;
+				const uid = req.params.uid;
+				if (uid !== decoded.uid) {
+					return res
+						.status(403)
+						.send({ message: 'Access Forbidden'});
+				}
     const query = {reported: true};
     const result = await productCollection
     .find(query)
@@ -141,20 +206,38 @@ const client = new MongoClient(uri, {
     res.send(result);
    });
    
-    //Category Related API
-    app.get('/categories' , async(req, res)=>{
-      const query = {};
-      const categories = await categoryCollection
-      .find(query)
-      .sort({category_name:1})
-      .toArray();
-      res.send(categories);
-    });
+    //Category Related API//
+    //Get all product filter by category id
+    // app.get('/categories' , async(req, res)=>{
+    //   const query = {};
+    //   const categories = await categoryCollection
+    //   .find(query)
+    //   .sort({category_name:1})
+    //   .toArray();
+    //   res.send(categories);
+    // });
 
-    app.post('/categories', async(req,res)=>{
-      // const uid = req.params.uid;
-      const category = req.body;
-      const result = await categoryCollection.insertOne(category);
+    //Get all category list
+		app.get('/categories', async (req, res) => {
+			const query = {};
+			const categories = await categoryCollection
+				.find(query)
+				.sort({ category_name: 1 })
+				.toArray();
+			res.send(categories);
+		});
+
+    //Create a category items by Seller
+    app.post('/categories/:uid',verifyToken,verifySeller, async(req,res)=>{
+      const decoded = req.decoded;
+      const uid = req.params.uid;
+      const new_category = req.body;
+      if (uid !== decoded.uid) {
+        return res
+          .status(403)
+          .send({ message: 'Access Forbidden'});
+      }
+      const result = await categoryCollection.insertOne(new_category);
       res.send(result);
 
     });
@@ -222,8 +305,15 @@ const client = new MongoClient(uri, {
     });
 
     //Delete user by admin
-    app.delete('/user-delete/:id', async(req,res)=>{
+    app.delete('/user-delete/:id', verifyToken,verifyAdmin, async(req,res)=>{
+      const decoded = req.decoded;
+				const uid = req.params.uid;
       const id = req.query.id;
+      if (uid !== decoded.uid) {
+        return res
+          .status(403)
+          .send({ message: 'Access Forbidden' });
+      }
       const filter = { _id: new ObjectId(id)};
       const result = await userCollection.deleteOne(filter);
       res.send(result);
@@ -232,22 +322,45 @@ const client = new MongoClient(uri, {
 
 
     //order related API//
-    app.get('/orders', async(req, res)=>{
-      const orders = await orderCollection.find().toArray();
+    //Get all order filter by user uid
+    app.get('/orders/:uid', async(req, res)=>{
+      const decoded = req.decoded;
+			const uid = req.params.uid;
+			if (uid !== decoded.uid) {
+				return res
+					.status(403)
+					.send({ message: 'Access Forbidden'});
+			}
+      const query = { 'customer_info.customer_uid': uid };
+      const orders = await orderCollection.find(query).toArray();
       res.send(orders);
     });
 
 
-
-    app.get('/orders/:id' , async(req, res)=> {
-      const id = req.params.id;
+    //Get a single order by user uid and order id
+    app.get('/order/:uid' , verifyToken, async(req, res)=> {
+      const decoded = req.decoded;
+			const uid = req.params.uid;
+			if (uid !== decoded.uid) {
+				return res
+					.status(403)
+					.send({ message: 'Access Forbidden'});
+			}
+      const id = req.query.id;
       const query = {_id: new ObjectId(id)};
       const order = await orderCollection.findOne(query);
       res.send(order);
     });
 
     //Create a order by user
-    app.post('/orders', async(req,res)=>{
+    app.post('/orders/:uid',verifyToken, async(req,res)=>{
+      const decoded = req.decoded;
+			const uid = req.params.uid;
+			if (uid !== decoded.uid) {
+				return res
+					.status(403)
+					.send({ message: 'Access Forbidden'});
+			}
       const order = req.body;
       const result = await orderCollection.insertOne(order);
       res.send(result);
@@ -259,21 +372,28 @@ const client = new MongoClient(uri, {
 
     });
 
-    //Promote related API//
+    //Promotion related API//
 
     //Get All Promoted Product
     app.get('/promoted-product', async(req, res)=>{
       const query = {promote: true};
-      const products = await productCollection
+      const result = await productCollection
       .find(query)
       .sort({createAt: -1})
       .toArray();
-      res.send(products);
+      res.send(result);
     });
 
     // Make a product to promoted product
-    app.patch('/promote-product', async(req, res)=>{
+    app.patch('/promote-product',verifyToken,verifySeller, async(req, res)=>{
+      const decoded = req.decoded;
+				const uid = req.params.uid;
       const id = req.query.id;
+      if (uid !== decoded.uid) {
+        return res
+          .status(403)
+          .send({ message: 'Access Forbidden'});
+      }
       const filter = {_id: new ObjectId(id)};
       const option = {upsert: true};
       const updatedDoc = {
@@ -306,6 +426,69 @@ app.post('/blog', async(req, res)=>{
 
 
 //Payment Related API//
+//Create Payment Intent
+app.post('/create-payment-intent/:uid', verifyToken, async(req,res)=>{
+  const uid = req.params.uid;
+			const decode = req.decoded;
+			const id = req.query.id;
+			if (uid !== decode.uid) {
+				return res
+					.status(401)
+					.send({ message: 'Unauthorized Access'});
+			}
+			const query = { _id: new ObjectId(id) };
+      const product = await productCollection.findOne(query);
+      const price = product?.resell_price*100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price,
+        currency:'usd',
+        payment_method_types: ['card'],
+      });
+      res.send({clientSecret: paymentIntent.client_secret});
+});
+
+//save payment data to database
+app.post('/payments/:uid', async(req,res)=>{
+  const uid = req.params.uid;
+			const decode = req.decoded;
+			if (uid !== decode.uid) {
+				return res
+					.status(401)
+					.send({ message: 'Unauthorized Access'});
+			}
+			const payment = req.body;
+			const result = await paymentCollection.insertOne(payment);
+			res.send(result);
+
+      //set order status true after payment done
+      const orderQuery = { _id: ObjectId(payment.orderId) };
+			const option = { upsert: true };
+			const orderUpdatedDoc = {
+				$set: {
+					order_status: true,
+				},
+			};
+			const orderResult = await orderCollection.updateOne(
+				orderQuery,
+				orderUpdatedDoc,
+				option
+			);
+
+      //set order status true and promote status false after payment done
+			const productQuery = { _id: ObjectId(payment.product_id) };
+			const productUpdatedDoc = {
+				$set: {
+					order_status: true,
+					promote: false,
+				},
+			};
+      const productResult = await productCollection.updateOne(
+				productQuery,
+				productUpdatedDoc,
+				option
+			);
+})
+
   } finally {
     
     // await client.close();
