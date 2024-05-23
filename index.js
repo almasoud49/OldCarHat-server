@@ -139,7 +139,8 @@ const client = new MongoClient(uri, {
 
     });
 
-    //User Related API
+
+    //User Related API//
 
     //Saved new user data on database
     app.post('/users', async(req, res)=>{
@@ -191,7 +192,26 @@ const client = new MongoClient(uri, {
 
     });
 
-    //order related API
+    //Checked user is Seller
+    app.get('/user/seller/:id' , async(req, res)=>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const user = await userCollection.findOne(query);
+      res.send({isSeller: user?.role === 'seller' ? true: false});
+
+    });
+
+    //Delete user by admin
+    app.delete('/user-delete/:id', async(req,res)=>{
+      const id = req.query.id;
+      const filter = { _id: new ObjectId(id)};
+      const result = await userCollection.deleteOne(filter);
+      res.send(result);
+    });
+
+
+
+    //order related API//
     app.get('/orders', async(req, res)=>{
       const orders = await orderCollection.find().toArray();
       res.send(orders);
