@@ -42,11 +42,31 @@ const client = new MongoClient(uri, {
     const blogCollection = database.collection('blogs');
     const paymentCollection = database.collection('payments');
    
+    //JWT Token//
+    app.post('/jwt', async(req, res)=>{
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_ACCESS_TOKEN,{expiresIn:process.env.JWT_SECRET_EXPIRESIN});
+      res.send({token})
+    });
 
+   // middlewares 
+    const verifyToken = (req, res, next) =>{
+      const authHeader = req.headers.authorization;
+      if(!authHeader){
+        return res.status(401).send({message:"Unauthorized Access"});
+      }
+      const token = req.headers.authorization.split(' ')[1];
+      jwt.verify(token, process.env.JWT_ACCESS_TOKEN, (err, decoded)=>{
+        if(err){
+          return res.status(401).send({message:"Unauthorized Access"})
+          }
+          req.decoded= decoded;
+          next();
+      })
+    }
 
-   
-   //Products related API
-   app.get('/products' , async(req, res)=>{
+   //Products related API//
+   app.get('/products' ,verifyToken, async(req, res)=>{
     const query = {};
     const result = await productCollection
     .find(query)
