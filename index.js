@@ -226,7 +226,7 @@ const client = new MongoClient(uri, {
       res.send(order);
     });
 
-
+    //Create a order by user
     app.post('/orders', async(req,res)=>{
       const order = req.body;
       const result = await orderCollection.insertOne(order);
@@ -237,7 +237,38 @@ const client = new MongoClient(uri, {
       const option = {upsert: true};
       const orderedProduct = await productCollection.findOne(productQuery)
 
-    })
+    });
+
+    //Promote related API//
+
+    //Get All Promoted Product
+    app.get('/promoted-product', async(req, res)=>{
+      const query = {promote: true};
+      const products = await productCollection
+      .find(query)
+      .sort({createAt: -1})
+      .toArray();
+      res.send(products);
+    });
+
+    // Make a product to promoted product
+    app.patch('/promote-product', async(req, res)=>{
+      const id = req.query.id;
+      const filter = {_id: new ObjectId(id)};
+      const option = {upsert: true};
+      const updatedDoc = {
+        $set: {
+          promote: true
+        }
+      };
+      const result = await productCollection.updateOne(
+        filter, 
+        updatedDoc, 
+        option
+      );
+      res.send(result);
+    });
+
 
   } finally {
     
