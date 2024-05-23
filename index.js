@@ -46,7 +46,6 @@ const client = new MongoClient(uri, {
 
    
    //Products related API
-
    app.get('/products' , async(req, res)=>{
     const query = {};
     const result = await productCollection
@@ -54,22 +53,73 @@ const client = new MongoClient(uri, {
     .sort({createdAt: -1})
     .toArray();
     res.send(result);
-   })
+   });
 
    app.post('/products', async(req,res)=>{
     const product = req.body;
     const result = await productCollection.insertOne(product);
     res.send(result);
    });
+
+   //Get all reported seller product
+   app.get('/reported-products' ,async(req, res)=>{
+    const query = {reported: true};
+    const result = await productCollection
+    .find(query)
+    .sort({reportCount: 1})
+    .toArray();
+    res.send(result);
+  });
+
+
+   app.patch('/report-product/:id' , async(req,res)=>{
+    const id = req.query.id;
+    const prevReport = parseInt(req.query.reportCount);
+    const filter = {_id: new ObjectId(id)};
+    const option = {upsert: true};
+    const updatedDoc = {
+      $set: {
+        reported: true,
+        reportedCount: prevReport + 1
+      }
+    };
+
+    const result = await productCollection.updateOne(filter, updatedDoc,option);
+    res.send(result);
+  });
    
+  //Delete a product created by seller (delete by seller)
    app.delete('/product-delete/:id', async(req,res)=>{
     const id = req.params.id;
     const filter = {_id: new ObjectId(id)};
     const result = await productCollection.deleteOne(filter);
     res.send(result);
 
-   })
+   });
    
+   //Undo report given by buyer(Admin Only)
+   app.patch('/report-product-safe/:id', async(req,res)=>{
+    const id = req.query.id;
+    const filter = {_id: new ObjectId(id)};
+    const option = {upsert: true};
+    const updatedDoc = {
+      $set : {
+        reported:false
+      }
+    };
+    const result = await productCollection.updateOne(
+      filter, updatedDoc,option
+    )
+    res.send(result)
+   });
+
+   //Delete Reported product by admin
+   app.delete('/report-product-delete/:id', async(req, res)=>{
+    const id = req.query.id;
+    const filter = {_id: new ObjectId(id)};
+    const result = await productCollection.deleteOne(filter);
+    res.send(result);
+   });
    
     //Category Related API
     app.get('/categories' , async(req, res)=>{
@@ -90,12 +140,15 @@ const client = new MongoClient(uri, {
     });
 
     //User Related API
+
+    //Saved new user data on database
     app.post('/users', async(req, res)=>{
       const user = req.body;
       const result = await userCollection.insertOne(user);
       res.send(result);
     });
 
+    //Check user is Admin
     app.get('/user/admin/:id' , async(req,res)=>{
       const id = req.params.id;
       const query = {_id: new ObjectId(id)}
@@ -104,15 +157,7 @@ const client = new MongoClient(uri, {
 
     });
 
-    //Get all reported seller product
-    app.get('/reported-products' ,async(req, res)=>{
-      const query = {reported: true};
-      const result = await productCollection
-      .find(query)
-      .sort({reportCount: 1})
-      .toArray();
-      res.send(result);
-    });
+       
 
     app.get('/user/buyer/:id', async(req,res)=>{
       const id = req.params.id;
@@ -121,23 +166,15 @@ const client = new MongoClient(uri, {
       res.send({isBuyer: user?.role === 'buyer' ? true : false});
     });
 
-    //Report a seller created product by buyer, only buyer can report
+    //Get all user data filter by their role
+    app.get('/users-by-role' , async(req, res)=>{
+      const role = req.query.role;
+      const query = {role};
+      const users = await userCollection.find(query).toArray();
+      res.send(users);
+    })
 
-    app.patch('/report-product/:id' , async(req,res)=>{
-      const id = req.query.id;
-      const prevReport = parseInt(req.query.reportCount);
-      const filter = {_id: new ObjectId(id)};
-      const option = {upsert: true};
-      const updatedDoc = {
-        $set: {
-          reported: true,
-          reportedCount: prevReport + 1
-        }
-      };
-
-      const result = await productCollection.updateOne(filter, updatedDoc,option);
-      res.send(result);
-    });
+    
 
     //order related API
     app.get('/orders', async(req, res)=>{
